@@ -3,12 +3,12 @@ package to.grindelf.neuralclassifier.neuralnetwork.network;
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
 import to.grindelf.neuralclassifier.domain.utils.Bug;
-import to.grindelf.neuralclassifier.domain.utils.KotlinRandomizer;
 import to.grindelf.neuralclassifier.neuralnetwork.utils.*;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Random;
 
 import static to.grindelf.neuralclassifier.neuralnetwork.utils.NeurMath.*;
 
@@ -229,16 +229,22 @@ public class NeuralBugClassifier implements Network {
     }
 
     private void initWeightsAndThresholds() {
+
+        Random randomizer = new Random(37);
+
         for (Neuron neuron : inputLayer) {
-            neuron.setWeights(initRandomWeights(hiddenLayer.size()));
+            neuron.setWeights(initRandomWeights(hiddenLayer.size(), randomizer));
         }
 
-        List<Double> thresholds = KotlinRandomizer.INSTANCE.getRandomVectorBetween(0.0, 0.5, 37, hiddenLayer.size() + outputLayer.size());
+        List<Double> thresholds = new ArrayList<>();
+        for (int ignored = 0; ignored < hiddenLayer.size() + outputLayer.size(); ignored++) {
+            thresholds.add(randomizer.nextDouble(-1.0, 1.0));
+        }
 
         // hidden layer
         for (int i = 0; i < hiddenLayer.size(); i++) {
             Neuron neuron = hiddenLayer.get(i);
-            neuron.setWeights(initRandomWeights(outputLayer.size()));
+            neuron.setWeights(initRandomWeights(outputLayer.size(), randomizer));
             neuron.setThreshold(thresholds.get(i));
         }
 
@@ -254,7 +260,12 @@ public class NeuralBugClassifier implements Network {
 
     @NotNull
     @Contract(pure = true)
-    private List<Double> initRandomWeights(int nextLayerSize) {
-        return KotlinRandomizer.INSTANCE.getRandomVectorBetween(0.0, 0.5, 37, nextLayerSize);
+    private List<Double> initRandomWeights(int nextLayerSize, Random randomizer) {
+        List<Double> weights = new ArrayList<>();
+        for (int ignored = 0; ignored < nextLayerSize; ignored++) {
+            weights.add(randomizer.nextDouble(0.0, 1.0));
+        }
+
+        return weights;
     }
 }
