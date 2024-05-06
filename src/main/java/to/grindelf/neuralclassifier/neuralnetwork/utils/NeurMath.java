@@ -12,15 +12,15 @@ import static java.lang.Math.max;
 public class NeurMath {
 
     @NotNull
-    public static Loss meanLoss(@NotNull List<Double> list) {
-        Loss loss = new Loss(0.0);
+    public static Double meanLoss(@NotNull List<Double> list) {
+        double loss = 0.0;
 
         if (!list.isEmpty()) {
             double sum = 0.0;
             for (double num : list) {
                 sum += num;
             }
-            loss.setFunctionValue(sum / list.size());
+            loss = sum / list.size();
         }
 
         return loss;
@@ -39,14 +39,17 @@ public class NeurMath {
     }
 
     public static double derivativeOfRelu(double x) {
-        return x > 0 ? 1 : 0;
+        double derivative = 0.0;
+        if (x > 0.0) derivative = 1.0;
+
+        return derivative;
     }
 
     @Contract(pure = true)
-    public static double neuronValue(@NotNull List<Neuron> neurons, int targetNeuronIndex, double targetThreshold) {
+    public static double neuronSum(@NotNull List<Neuron> neurons, int targetNeuronIndex, double targetThreshold) {
         double sum = 0.0;
         for (Neuron neuron : neurons) {
-            sum += neuron.getValue() * neuron.getWeights().get(targetNeuronIndex) + neuron.getThreshold();
+            sum += neuron.getValue() * neuron.getWeights().get(targetNeuronIndex);
         }
 
         return sum + targetThreshold;

@@ -24,7 +24,7 @@ public interface Network {
      *
      * @throws IllegalArgumentException when data cannot be used for training.
      */
-    public List<Loss> train(@NotNull List<? extends NeurType> data, int numberOfEpochs, double learningRate) throws IllegalArgumentException;
+    public List<Double> train(@NotNull List<? extends NeurType> data, int numberOfEpochs, double learningRate) throws IllegalArgumentException;
 
 
     /**

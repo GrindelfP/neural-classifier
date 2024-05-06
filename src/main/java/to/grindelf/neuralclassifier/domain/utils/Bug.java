@@ -16,12 +16,6 @@ public class Bug implements NeurType {
         this.type = new NeurClass(type);
     }
 
-    public Bug(double length, double width) {
-        this.length = length;
-        this.width = width;
-        this.type = new NeurClass(-1);
-    }
-
     public double getLength() {
         return length;
     }

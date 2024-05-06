@@ -9,16 +9,17 @@ public class Neuron {
 
     private double value;
     private List<Double> weights;
-    private double error;
     private double sum;
     private double threshold;
+    private double localGradient;
+
 
     public Neuron() {
         this.value = 0.0;
         this.weights = Collections.emptyList();
-        this.error = 0.0;
         this.sum = 0.0;
         this.threshold = 0.0;
+        this.localGradient = 0.0;
     }
 
     public double getValue() {
@@ -34,16 +35,13 @@ public class Neuron {
         return weights;
     }
 
+    public void updateWeights(@NotNull Integer index, @NotNull Double value) {
+        double currentWeight = this.weights.get(index);
+        this.weights.set(index, currentWeight + value);
+    }
+
     public void setWeights(List<Double> weights) {
         this.weights = weights;
-    }
-
-    public double getError() {
-        return error;
-    }
-
-    public void setError(double error) {
-        this.error = error;
     }
 
     public double getSum() {
@@ -60,5 +58,17 @@ public class Neuron {
 
     public void setThreshold(double threshold) {
         this.threshold = threshold;
+    }
+    
+    public void updateThreshold(double subtrahend) {
+        this.threshold -= subtrahend;
+    }
+
+    public double getLocalGradient() {
+        return localGradient;
+    }
+
+    public void setLocalGradient(double localGradient) {
+        this.localGradient = localGradient;
     }
 }

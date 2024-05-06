@@ -3,12 +3,12 @@ package to.grindelf.neuralclassifier.neuralnetwork.network;
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
 import to.grindelf.neuralclassifier.domain.utils.Bug;
-import to.grindelf.neuralclassifier.domain.utils.Loss;
+import to.grindelf.neuralclassifier.domain.utils.KotlinRandomizer;
 import to.grindelf.neuralclassifier.neuralnetwork.utils.*;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
-import java.util.Random;
 
 import static to.grindelf.neuralclassifier.neuralnetwork.utils.NeurMath.*;
 
@@ -19,7 +19,10 @@ public class NeuralBugClassifier implements Network {
     private final List<Neuron> outputLayer;
     private final FunctionsOrder functionsOrder;
 
-    public NeuralBugClassifier(@NotNull NeurShape shape, @NotNull FunctionsOrder functionsOrder) throws IllegalArgumentException {
+    public NeuralBugClassifier(
+            @NotNull NeurShape shape,
+            @NotNull FunctionsOrder functionsOrder
+    ) throws IllegalArgumentException {
         if (shape.getInputLayerSize() != 2) {
             throw new IllegalArgumentException("Input layer should be of size 2!");
         } else if (shape.getOutputLayerSize() != 1) {
@@ -32,6 +35,8 @@ public class NeuralBugClassifier implements Network {
         this.outputLayer = initLayer(shape.getOutputLayerSize());
 
         this.functionsOrder = functionsOrder;
+
+        initWeightsAndThresholds();
     }
 
     /**
@@ -47,10 +52,16 @@ public class NeuralBugClassifier implements Network {
      */
     @Override
     @NotNull
-    public List<Loss> train(@NotNull List<? extends NeurType> data, int numberOfEpochs, double learningRate) throws IllegalArgumentException {
-        List<Loss> lossHistory = new ArrayList<>();
+    public List<Double> train(
+            @NotNull List<? extends NeurType> data,
+            int numberOfEpochs,
+            double learningRate
+    ) throws IllegalArgumentException {
+        List<Double> lossHistory = new ArrayList<>();
         List<Bug> bugs = new ArrayList<>();
         NeurClass target;
+        double lossFunctionValue;
+        double sumOfOutputLayerGradients;
         try {
             for (NeurType neurObject : data) {
                 bugs.add((Bug) neurObject);
@@ -60,20 +71,36 @@ public class NeuralBugClassifier implements Network {
         }
 
         for (int ignored = 0; ignored < numberOfEpochs; ignored++) {
-            List<Double> lossFunctionsForCurrentEpoch = new ArrayList<>();
+            sumOfOutputLayerGradients = 0.0;
+            Collections.shuffle(bugs);
+            List<Double> lossFunctionsByCurrentEpoch = new ArrayList<>();
             for (Bug bug : bugs) {
                 target = bug.getType();
                 prepareValues(bug);
+
                 forward();
-                lossFunctionsForCurrentEpoch.add(backwards(target));
-                updates(learningRate);
+
+                lossFunctionValue = crossEntropy(target.getValue(), outputLayer.get(0).getValue());
+                lossFunctionsByCurrentEpoch.add(lossFunctionValue);
+
+                sumOfOutputLayerGradients += lossFunctionValue * derivativeOfSigmoid(outputLayer.get(0).getSum());
             }
-            Loss loss = meanLoss(lossFunctionsForCurrentEpoch);
+
+            backwards(sumOfOutputLayerGradients, learningRate);
+
+            Double loss = meanLoss(lossFunctionsByCurrentEpoch);
             lossHistory.add(loss);
-            System.out.println("Current loss is " + loss.getFunctionValue());
         }
 
         return lossHistory;
+    }
+
+    @NotNull
+    private Double crossEntropy(
+            double target,
+            double actual
+    ) {
+        return -target * Math.log(actual) - (1 - target) * Math.log(1 - actual);
     }
 
     /**
@@ -85,7 +112,9 @@ public class NeuralBugClassifier implements Network {
      */
     @NotNull
     @Override
-    public List<NeurClass> predict(@NotNull List<? extends NeurType> X) throws IllegalArgumentException {
+    public List<NeurClass> predict(
+            @NotNull List<? extends NeurType> X
+    ) throws IllegalArgumentException {
         List<NeurClass> classes = new ArrayList<>();
 
         List<Bug> bugs = new ArrayList<>();
@@ -102,7 +131,6 @@ public class NeuralBugClassifier implements Network {
             forward();
             classes.add(new NeurClass(outputLayer.get(0).getValue()));
         }
-
 
         return classes;
     }
@@ -126,84 +154,107 @@ public class NeuralBugClassifier implements Network {
     }
 
     private void forward() {
+        // input -> hidden
         for (int i = 0; i < hiddenLayer.size(); i++) {
+            hiddenLayer.get(i).setSum(neuronSum(
+                    inputLayer,
+                    i,
+                    hiddenLayer.get(i).getThreshold())
+            );
             if (functionsOrder.getFirst() == FunctionName.SIGMOID) {
-                hiddenLayer.get(i).setValue(sigmoid(neuronValue(inputLayer, i, hiddenLayer.get(i).getThreshold())));
+                hiddenLayer.get(i).setValue(sigmoid(hiddenLayer.get(i).getSum()));
             } else {
-                hiddenLayer.get(i).setValue(relu(neuronValue(inputLayer, i, hiddenLayer.get(i).getThreshold())));
+                hiddenLayer.get(i).setValue(relu(hiddenLayer.get(i).getSum()));
             }
         }
+
+        // hidden -> output
         for (int i = 0; i < outputLayer.size(); i++) {
-            if (functionsOrder.getFirst() == FunctionName.SIGMOID) {
-                outputLayer.get(i).setValue(sigmoid(neuronValue(hiddenLayer, i, outputLayer.get(i).getThreshold())));
+            outputLayer.get(i).setSum(neuronSum(
+                    hiddenLayer,
+                    i,
+                    outputLayer.get(i).getThreshold())
+            );
+            if (functionsOrder.getSecond() == FunctionName.SIGMOID) {
+                outputLayer.get(i).setValue(sigmoid(outputLayer.get(i).getSum()));
             } else {
-                outputLayer.get(i).setValue(relu(neuronValue(hiddenLayer, i, outputLayer.get(i).getThreshold())));
+                outputLayer.get(i).setValue(relu(outputLayer.get(i).getSum()));
             }
         }
     }
 
     @Contract(pure = true)
-    private double backwards(@NotNull NeurClass target) {
-        outputLayer.get(0).setError(Math.pow(target.getValue() - outputLayer.get(0).getValue(), 2));
+    private void backwards(@NotNull Double sumOfOutputLayerGradients, @NotNull Double learningRate) {
+        // output -> hidden
+        outputLayer.get(0).setLocalGradient(sumOfOutputLayerGradients);
+        outputLayer.get(0).updateThreshold(learningRate * outputLayer.get(0).getLocalGradient() * outputLayer.get(0).getValue());
 
-        for (Neuron neuron : hiddenLayer) {
+        for (Neuron hiddenNeuron : hiddenLayer) {
+            hiddenNeuron.updateWeights(
+                    0,
+                    learningRate * outputLayer.get(0).getLocalGradient() * hiddenNeuron.getValue()
+            );
             if (functionsOrder.getFirst() == FunctionName.SIGMOID) {
-                neuron.setError(derivativeOfSigmoid(neuron.getValue()) * neuron.getWeights().get(0) * outputLayer.get(0).getError());
+                hiddenNeuron.setLocalGradient(
+                        outputLayer.get(0).getLocalGradient()
+                                * hiddenNeuron.getWeights().get(0)
+                                * derivativeOfSigmoid(hiddenNeuron.getSum())
+                );
+
             } else {
-                neuron.setError(derivativeOfRelu(neuron.getValue()) * neuron.getWeights().get(0) * outputLayer.get(0).getError());
+                hiddenNeuron.setLocalGradient(
+                        outputLayer.get(0).getLocalGradient()
+                                * hiddenNeuron.getWeights().get(0)
+                                * derivativeOfRelu(hiddenNeuron.getSum())
+                );
             }
+            hiddenNeuron.updateThreshold(learningRate * hiddenNeuron.getLocalGradient() * hiddenNeuron.getValue());
         }
 
-        return outputLayer.get(0).getError();
-    }
-
-    private void updates(double learningRate) {
-
-        for (int i = 0; i < hiddenLayer.size(); i++) {
-            for (Neuron neuron : inputLayer) {
-                double iWeight = neuron.getWeights().get(i);
-                neuron.getWeights().set(i, iWeight + neuron.getValue() * hiddenLayer.get(i).getError() * learningRate);
+        // hidden -> input
+        for (Neuron inputNeuron : inputLayer) {
+            for (int i = 0; i < hiddenLayer.size(); i++) {
+                inputNeuron.updateWeights(
+                        i,
+                        learningRate * hiddenLayer.get(i).getLocalGradient() * inputNeuron.getValue()
+                );
             }
         }
-
-        for (int i = 0; i < outputLayer.size(); i++) {
-            for (Neuron neuron : hiddenLayer) {
-                double iWeight = neuron.getWeights().get(i);
-                neuron.getWeights().set(i, iWeight + neuron.getValue() * outputLayer.get(i).getError() * learningRate);
-            }
-        }
-
     }
 
     private void prepareValues(@NotNull Bug bug) {
         // input layer
         inputLayer.get(0).setValue(bug.getLength());
         inputLayer.get(1).setValue(bug.getWidth());
+    }
+
+    private void initWeightsAndThresholds() {
         for (Neuron neuron : inputLayer) {
             neuron.setWeights(initRandomWeights(hiddenLayer.size()));
-            neuron.setThreshold(Math.random());
         }
+
+        List<Double> thresholds = KotlinRandomizer.INSTANCE.getRandomVectorBetween(0.0, 0.5, 37, hiddenLayer.size() + outputLayer.size());
 
         // hidden layer
-        for (Neuron neuron : hiddenLayer) {
-            neuron.setWeights(initRandomWeights(hiddenLayer.size()));
-            neuron.setThreshold(Math.random());
+        for (int i = 0; i < hiddenLayer.size(); i++) {
+            Neuron neuron = hiddenLayer.get(i);
+            neuron.setWeights(initRandomWeights(outputLayer.size()));
+            neuron.setThreshold(thresholds.get(i));
         }
 
-        // output layer has empty list of weights and its other values
-        // will be initialized later or are initialized already
+        // output layer
+        for (int i = 0; i < outputLayer.size(); i++) {
+            Neuron neuron = outputLayer.get(i);
+            neuron.setThreshold(thresholds.get(i + hiddenLayer.size()));
+        }
 
+        // output layer has empty list of weights
+        // and its other values will be initialized later or are initialized already
     }
 
     @NotNull
     @Contract(pure = true)
     private List<Double> initRandomWeights(int nextLayerSize) {
-        List<Double> weights = new ArrayList<>();
-        Random randomizer = (new Random());
-        for (int ignored = 0; ignored < nextLayerSize; ignored++) {
-            weights.add(randomizer.nextGaussian());
-        }
-
-        return weights;
+        return KotlinRandomizer.INSTANCE.getRandomVectorBetween(0.0, 0.5, 37, nextLayerSize);
     }
 }
